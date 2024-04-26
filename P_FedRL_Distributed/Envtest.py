@@ -1,3 +1,5 @@
+import copy
+
 import torch
 import gym
 from MyEnv import MyEnv
@@ -7,6 +9,7 @@ from Sharing import *
 import numpy as np
 import torch.nn as nn
 import torch
+import os
 import torch.nn.functional as F
 
 '''seed = 66
@@ -57,7 +60,25 @@ out.backward(retain_graph=True) # 这里可以不带参数，默认值为‘1’
 
 print(a.grad) # tensor([15., 18.])
 '''
-a= torch.tensor([1,2,3,4]) * 2
-b= torch.tensor([2,3,4,5])
-c = a+b
-print(c/2)
+'''def seed_everything(seed_value):
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+    os.environ['PYTHONHASHSEED'] = str(seed_value)
+
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed_value)
+        torch.cuda.manual_seed_all(seed_value)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = True
+
+a = torch.zeros((1,2))
+print(a)
+'''
+a = [1,2,3,4,5,6,7]
+print(id(a))
+print(id(a[2:] + a[:2]))
+a = a[2:] + a[:2]
+print(a,id(a))
+print(id(a))
+b = copy.deepcopy(a)
+print(b,id(b))

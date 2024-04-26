@@ -1,11 +1,11 @@
 #!/bin/bash
 
-for j in $(seq 0 3); do
+for j in $(seq 0 4); do
 	echo "Starting server $j"
 	python Server.py $j &
 	sleep 3
 	
-	for i in $(seq 0 4); do
+	for i in $(seq 0 9); do
 		echo "Starting client $i"
 		python Client.py --RLAgent-id $i &
 	done

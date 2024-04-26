@@ -4,7 +4,7 @@ echo "Starting server"
 python Server.py 0 &
 sleep 3  # Sleep for 3s to give the server enough time to start
 
-for i in $(seq 0 1); do
+for i in $(seq 0 4); do
     echo "Starting client $i"
     python Client.py --RLAgent-id $i &
 done

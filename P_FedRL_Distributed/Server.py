@@ -17,7 +17,7 @@ from flwr.server.strategy import Strategy
 from flwr.server.strategy.aggregate import aggregate_inplace, aggregate
 from Sharing import *
 import FL_agent
-from FL_agent import unpack_batch, MLP_Q_Net
+from FL_agent import unpack_batch, MLP_Q_Net, RLNet
 from MyEnv import MyEnv
 import os
 import sys
@@ -48,7 +48,7 @@ def seed_everything(seed_value):
 args=sys.argv[1] # 从bash脚本中得到当前server的参数。
 WARNING = 30
 BETA = 1
-recorder_log_dir = global_log_dir + 'Server/' + f'{args}/' + 'Train_P/'
+recorder_log_dir = global_log_dir + 'Server/' + f'client_number_is{N}/'+ f'{args}/' + 'Train_P/'
 if not os.path.exists(recorder_log_dir):
     os.makedirs(recorder_log_dir)
 
@@ -94,7 +94,40 @@ def distance(para_g:NDArrays, para_i:NDArrays)->float:
 # Softmax is needed because I want to give each
 
 
+@torch.no_grad()
+def test_evaluation(network_type,
+               net: RLNet,
+               env: MyEnv,
+               evaluate_episodes_for_eval=10,
+               gamma=GAMMA,
+               replay_size=REPLAY_SIZE,
+               threshold=2.0):
+    if network_type == 'Q':
+        # for Q-neywork
+        selector = ptan.actions.ArgmaxActionSelector()
+        agent = ptan.agent.DQNAgent(net, selector, device=DEVICE)
+        exp_source = ptan.experience.ExperienceSourceFirstLast(env, agent, gamma=gamma)
+        buffer = ptan.experience.ExperienceReplayBuffer(exp_source,buffer_size=replay_size)
 
+        step = 0
+        episode = 0
+        evaluate_reward = 0
+
+        while True:
+            step += 1
+            buffer.populate(1)
+
+            for reward, steps in exp_source.pop_rewards_steps():
+                episode += 1
+                evaluate_reward += reward
+            if episode >= evaluate_episodes_for_eval:
+                break
+
+        # return rewards got within evaluate_episodes_for_eval episodes.
+        evaluate_reward /= evaluate_episodes_for_eval
+
+        return evaluate_reward, step
+    return
 class PriorityStrategy(Strategy):
     def __init__(
             self,
@@ -104,12 +137,7 @@ class PriorityStrategy(Strategy):
             min_fit_clients: int = 2,
             min_evaluate_clients: int = 2,
             min_available_clients: int = 2,
-            evaluate_fn: Optional[
-                Callable[
-                    [int, NDArrays, Dict[str, Scalar]],
-                    Optional[Tuple[float, Dict[str, Scalar]]],
-                ]
-            ] = None,
+            evaluate_fn: test_evaluation,
             on_fit_config_fn: Optional[Callable[[int], Dict[str, Scalar]]] = None,
             on_evaluate_config_fn: Optional[Callable[[int], Dict[str, Scalar]]] = None,
             accept_failures: bool = True,
@@ -148,6 +176,8 @@ class PriorityStrategy(Strategy):
         self.evaluate_metrics_aggregation_fn = evaluate_metrics_aggregation_fn
         self.inplace = inplace
         self.cum_reward_avg = np.zeros(record_len)
+        self.test_reward = np.zeros((record_len))
+        self.test_reward_thisite = torch.zeros(size=(1, TEST_SIZE))
         self.done = done
         self.env = env
         self.model = model
@@ -190,18 +220,22 @@ class PriorityStrategy(Strategy):
         if self.evaluate_fn is None:
             # No evaluation function provided
             return None
-        parameters_ndarrays = parameters_to_ndarrays(parameters)
-
+        parameters_ndarrays = parameters_to_ndarrays(self.global_parameters)
+        params_dict = zip(self.model.state_dict().keys(), parameters_ndarrays)
+        state_dict = OrderedDict({k: torch.tensor(v, requires_grad=True) for k, v in params_dict})
+        self.model.load_state_dict(state_dict, strict=True)
         # server端的评估方法；
         # 需要重写server端的评估方法： -> reward:float
-        eval_res = self.evaluate_fn(server_round, parameters_ndarrays, {})
-        if eval_res is None:
-            return None
-
-        # 只返回一个reward.
-        reward = eval_res
-        # loss, metrics = eval_res
-        return reward
+        for i in range(TEST_SIZE):
+            this_env=env_class(para=server_test_theta[i])
+            reward, _ = self.evaluate_fn("Q",
+                                         self.model,
+                                         this_env)
+            self.test_reward_thisite[0,i]=reward
+        self.test_reward[server_round-1] = torch.mean(self.test_reward_thisite)
+        print(f"------------------Here we are doing {server_round}th global evaluation!------------------")
+        print(self.test_reward)
+        return None # reward
 
     def configure_fit(
             self, server_round: int, parameters: Parameters, client_manager: ClientManager
@@ -392,22 +426,21 @@ class PriorityStrategy(Strategy):
 
             # 使用client和global模型之间的距离进行聚合，更改weighted_results
             # P_DQN with epsilon-greedy
-            '''epsilon= 0.9
+            # epsilon= 0.9
             parameters = [
                 parameters_to_ndarrays(fit_res.parameters)
                 for _, fit_res in results
             ]
-            # epsilon * 1.0 /
             weights = [pow(distance(parameters_to_ndarrays(self.global_parameters), net_para), BETA) for net_para in parameters]
-            parameters.append(parameters_to_ndarrays(self.global_parameters))
-            weights.append(1 - epsilon)
-            weights_results = list(zip(parameters, weights))'''
+            # parameters.append(parameters_to_ndarrays(self.global_parameters))
+            # weights.append(1 - epsilon)
+            weights_results = list(zip(parameters, weights))
 
             # R_DQN
-            weights_results = [
+            '''weights_results = [
                 (parameters_to_ndarrays(fit_res.parameters), fit_res.num_examples)
                 for _, fit_res in results
-            ]
+            ]'''
             # DQNAvg
             '''weights_results = [
                 (parameters_to_ndarrays(fit_res.parameters), 1)
@@ -432,6 +465,8 @@ class PriorityStrategy(Strategy):
     def write_log(self):
         print("Writing log file!")
         np.save(recorder_log_dir + 'cum_reward_avg.npy', self.cum_reward_avg)
+        np.save(recorder_log_dir + 'server_test.npy', self.test_reward)
+        torch.save(self.global_parameters, recorder_log_dir + 'server_parameters.pt')
         return
 
     def aggregate_evaluate(
@@ -454,7 +489,7 @@ class PriorityStrategy(Strategy):
 
         self.cum_reward_avg[server_round-1] = SimpleAverage_reward
         print(self.cum_reward_avg)
-        if server_round == record_len:
+        if server_round == record_len: # When the training progress is done, we can write down the test log file.
             self.done = True
             self.write_log()
         # Aggregate loss
@@ -477,6 +512,8 @@ class PriorityStrategy(Strategy):
 seed = 666
 seed_everything(seed)
 
+server_test_theta = np.random.uniform(low=0, high=1, size=TEST_SIZE)
+
 server_theta = np.random.uniform()
 env_train = env_class(para=server_theta)
 obs_size = env_train.observation_space.shape[0]
@@ -493,7 +530,8 @@ strategy = PriorityStrategy(initial_parameters=init_parameters,
                             env=env_train,
                             model=model,
                             weights=torch.tensor([1.0/N for i in range(N)],requires_grad=True),
-                            Center_Net=center_net)
+                            Center_Net=center_net,
+                            evaluate_fn=test_evaluation)
 
 
 # Start Flower server

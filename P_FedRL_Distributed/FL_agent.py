@@ -202,13 +202,13 @@ def double_dqn(env: MyEnv,
         if episode % sync_interval == 0:
             tgt_net.sync()
     # evaluate after fit
-    reward, _ = evaluation('Q',
+    '''reward, _ = evaluation('Q',
                            net=net,
                            env=env,
                            evaluate_episodes_for_eval=evaluate_episodes_for_eval, # 5
-                           gamma=gamma)
+                           gamma=gamma)'''
     # print("-----------------TRAINING PART IS DEAD!-----------------")
-    return net, int(reward), episode # int(reward)
+    return net, 1, episode # int(reward)
 
 
 def record_wrapper(record_method):

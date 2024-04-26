@@ -3,9 +3,9 @@ from MyCartPole import MyCartPoleEnv
 from MyAcrobot import MyAcrobotEnv
 from MyMountainCar import MountainCarEnv
 
-train_episodes_upper_bound = 1000 # 768 18 1000
-merge_interval = 40 # 48 2 40
-meta_merge = 10     # 12 1 10
+train_episodes_upper_bound = 18 # 768 18 1000
+merge_interval = 2 # 48 2 40
+meta_merge = 1     # 12 1 10
 assert train_episodes_upper_bound % merge_interval == 0  # This assumption is for convenience
 outer_loop_iter_upper_bound = int(train_episodes_upper_bound / merge_interval)
 record_len = outer_loop_iter_upper_bound  # We simply record every outer loop
@@ -37,10 +37,10 @@ global_log_dir = './P_Momentum_DQNAvg-CartPole-Distributed/'
 save_dir_name = 'plot-E_DQNAvg-Acrobot-Distributed'
 global_log_dir = './E_DQNAvg-Acrobot-Distributed/'
 '''
-'''
+
 save_dir_name = 'plot-P_DQNAvg-Acrobot-Distributed'
 global_log_dir = './P_DQNAvg-Acrobot-Distributed/'
-'''
+
 '''
 save_dir_name = 'plot-R_DQNAvg-Acrobot-Distributed'
 global_log_dir = './R_DQNAvg-Acrobot-Distributed/'
@@ -63,10 +63,10 @@ global_log_dir = './E_DQNAvg-MountainCar-Distributed/'
 save_dir_name = 'plot-P_DQNAvg-MountainCar-Distributed'
 global_log_dir = './P_DQNAvg-MountainCar-Distributed/'
 '''
-
+'''
 save_dir_name = 'plot-R_DQNAvg-MountainCar-Distributed'
 global_log_dir = './R_DQNAvg-MountainCar-Distributed/'
-
+'''
 '''
 save_dir_name = 'plot-DQNAvg-MountainCar-Distributed'
 global_log_dir = './DQNAvg-MountainCar-Distributed/'
@@ -89,7 +89,7 @@ evaluate_episodes_for_conv = EVALUATE_EPISODES_FOR_CONV
 solve_criterion = SOLVE_CRITERION
 replay_size = REPLAY_SIZE
 gamma = GAMMA
-lr = 1e-3 # LR Cartpole MountainCar 1e-3   Acrobot 1e-4
+lr = 1e-4 # LR Cartpole MountainCar 1e-3   Acrobot 1e-4
 # train_episodes_upper_bound should be specified later on
 agent_trainer_hyperparameters = {'epsilon': init_epsilon,
                                     'epsilon_decay': epsilon_decay,
@@ -107,8 +107,9 @@ evaluate_episodes_for_eval = EVALUATE_EPISODES_FOR_EVAL
 recorder_extra_hyperparameters = {'evaluate_episodes_for_eval': evaluate_episodes_for_eval}
 
 # env_class = MyCartPoleEnv
-# env_class = MyAcrobotEnv
-env_class = MountainCarEnv
+env_class = MyAcrobotEnv
+# env_class = MountainCarEnv
 
 SAY=True
-N = 5 # control the client number.
+N = 50 # control the client number.
+S = 5 # control the outer loop number
